@@ -7,5 +7,6 @@ namespace Core.Application.InterfaceServices
     public interface IAuthService
     {
         Task<ResponseObject<UserDTO>> Register(Request_Register request);
+        Task<string> ConfirmRegisterAccount(string code);
     }
 }
