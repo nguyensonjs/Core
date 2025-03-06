@@ -1,4 +1,4 @@
-﻿namespace Core.Application.Handle.HandleEmail
+﻿namespace Core.Configuration.Config
 {
     public class EmailConfiguration
     {

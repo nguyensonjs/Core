@@ -1,5 +1,6 @@
 ﻿using Core.Application.Handle.HandleEmail;
 using Core.Application.InterfaceServices;
+using Core.Configuration.Config;
 using MailKit.Net.Smtp;
 using MimeKit;
 
@@ -7,11 +8,11 @@ namespace Core.Application.ImplementServices
 {
     public class EmailService : IEmailService
     {
-        private readonly EmailConfiguration _configuration;
+        private readonly EmailConfiguration _emailConfig;
 
-        public EmailService(EmailConfiguration configuration)
+        public EmailService(EmailConfiguration emailConfig)
         {
-            _configuration = configuration ?? throw new ArgumentNullException(nameof(configuration));
+            _emailConfig = emailConfig;
         }
 
         public string SendVerificationEmail(string recipient, string verificationCode)
@@ -66,7 +67,7 @@ namespace Core.Application.ImplementServices
 
         private void AddSender(MimeMessage emailMess)
         {
-            emailMess.From.Add(new MailboxAddress(_configuration.FromDisplayName, _configuration.From));
+            emailMess.From.Add(new MailboxAddress(_emailConfig.FromDisplayName, _emailConfig.From));
         }
 
         private void AddRecipients(MimeMessage emailMess, EmailMessage message)
@@ -106,14 +107,14 @@ namespace Core.Application.ImplementServices
 
         private void ConnectSmtpClient(SmtpClient client)
         {
-            client.Connect(_configuration.SmtpServer, _configuration.Port, _configuration.EnableSsl);
+            client.Connect(_emailConfig.SmtpServer, _emailConfig.Port, _emailConfig.EnableSsl);
         }
 
         private void AuthenticateSmtpClient(SmtpClient client)
         {
-            if (!string.IsNullOrEmpty(_configuration.Username) && !string.IsNullOrEmpty(_configuration.Password))
+            if (!string.IsNullOrEmpty(_emailConfig.Username) && !string.IsNullOrEmpty(_emailConfig.Password))
             {
-                client.Authenticate(_configuration.Username, _configuration.Password);
+                client.Authenticate(_emailConfig.Username, _emailConfig.Password);
             }
         }
 

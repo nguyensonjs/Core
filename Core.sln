@@ -1,7 +1,7 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
-VisualStudioVersion = 17.12.35707.178 d17.12
+VisualStudioVersion = 17.12.35707.178
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Core.Api", "Core.Api\Core.Api.csproj", "{675435BB-5916-48DB-9603-808801852377}"
 EndProject
@@ -10,6 +10,8 @@ EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Core.Application", "Core.Application\Core.Application.csproj", "{8690F059-FB3F-4C78-A70A-B4E4BA4567A4}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Core.Domain", "Core.Domain\Core.Domain.csproj", "{DCC4564A-EF82-48B8-8AA3-6832FA11B618}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Core.Configuration", "Core.Configuration\Core.Configuration.csproj", "{1C2A96C7-43F9-40BC-AA90-D03670FBD96F}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -33,6 +35,10 @@ Global
 		{DCC4564A-EF82-48B8-8AA3-6832FA11B618}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{DCC4564A-EF82-48B8-8AA3-6832FA11B618}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{DCC4564A-EF82-48B8-8AA3-6832FA11B618}.Release|Any CPU.Build.0 = Release|Any CPU
+		{1C2A96C7-43F9-40BC-AA90-D03670FBD96F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{1C2A96C7-43F9-40BC-AA90-D03670FBD96F}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{1C2A96C7-43F9-40BC-AA90-D03670FBD96F}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{1C2A96C7-43F9-40BC-AA90-D03670FBD96F}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
