@@ -1,5 +1,4 @@
 ﻿using AutoMapper;
-using Core.Application.Handle.HandleEmail;
 using Core.Application.InterfaceServices;
 using Core.Application.Payloads.RequestModels.UserRequest;
 using Core.Application.Payloads.ResponseModels.DataUser;
@@ -9,6 +8,10 @@ using Core.Domain.Models;
 using Core.Domain.Validations;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Configuration;
+using Microsoft.IdentityModel.Tokens;
+using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
+using System.Text;
 using Bcrypt = BCrypt.Net.BCrypt;
 
 namespace Core.Application.ImplementServices
@@ -21,13 +24,15 @@ namespace Core.Application.ImplementServices
         private readonly IUserRepo _userRepo;
         private readonly IEmailService _emailService;
         private readonly IBaseRepo<ConfirmEmail> _baseEmailRepo;
+        private readonly IBaseRepo<RefreshToken> _baseRefeshToken;
 
         public AuthService(IBaseRepo<User> baseRepo,
-                           IMapper mapper,
-                           IConfiguration configuration,
-                           IUserRepo userRepo,
-                           IEmailService emailService,
-                           IBaseRepo<ConfirmEmail> baseEmailRepo)
+                          IMapper mapper,
+                          IConfiguration configuration,
+                          IUserRepo userRepo,
+                          IEmailService emailService,
+                          IBaseRepo<ConfirmEmail> baseEmailRepo,
+                          IBaseRepo<RefreshToken> baseRefeshToken)
         {
             _baseRepo = baseRepo;
             _mapper = mapper;
@@ -35,6 +40,7 @@ namespace Core.Application.ImplementServices
             _userRepo = userRepo;
             _emailService = emailService;
             _baseEmailRepo = baseEmailRepo;
+            _baseRefeshToken = baseRefeshToken;
         }
 
         public async Task<string> ConfirmRegisterAccount(string code)
@@ -42,22 +48,107 @@ namespace Core.Application.ImplementServices
             try
             {
                 var cfCode = await _baseEmailRepo.GetFirstOrDefaultAsync(x => x.ConfirmCode.Equals(code));
-                if (cfCode == null) {
+                if (cfCode == null)
                     return "Mã xác nhận không hợp lệ";
-                }
-                var user = await _baseRepo.GetFirstOrDefaultAsync(x => x.Id == cfCode.UserId);
-                if(cfCode.ExpiryTime < DateTime.Now)
-                {
+
+                if (cfCode.ExpiryTime < DateTime.UtcNow)
                     return "Mã xác nhận đã hết hạn";
-                };
+
+                var user = await _baseRepo.GetFirstOrDefaultAsync(x => x.Id == cfCode.UserId);
+                if (user == null)
+                    return "Người dùng không tồn tại";
+
                 user.Status = Domain.Enums.UserStatus.Active;
                 cfCode.IsEmailConfirmed = true;
+
                 await _baseRepo.UpdateAsync(user);
                 await _baseEmailRepo.UpdateAsync(cfCode);
+
                 return "Xác nhận đăng ký tài khoản thành công";
             }
-            catch (Exception ex) {
-                return ex.Message;
+            catch (Exception ex)
+            {
+                return $"Lỗi: {ex.Message}";
+            }
+        }
+
+        public async Task<ResponseObject<UserLoginDTO>> GetJwtTokenAsync(User user)
+        {
+            try
+            {
+                var claims = new List<Claim>
+                {
+                    new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
+                    new Claim(ClaimTypes.Name, user.UserName),
+                    new Claim(ClaimTypes.Email, user.Email)
+                };
+
+                // Lấy roles của user và thêm vào claims
+                var roles = await _userRepo.GetUserRoles(user);
+                claims.AddRange(roles.Select(role => new Claim(ClaimTypes.Role, role)));
+
+                string token = GenerateToken(claims);
+
+                string refreshToken = GenerateRefreshToken();
+
+                await StoreRefreshToken(user.Id, refreshToken);
+                var userLoginDto = _mapper.Map<UserLoginDTO>(user);
+                userLoginDto.AccessToken = token;
+                userLoginDto.RefreshToken = refreshToken;
+
+                return new ResponseObject<UserLoginDTO>
+                {
+                    Status = StatusCodes.Status200OK,
+                    Message = "Tạo token thành công",
+                    Data = userLoginDto
+                };
+            }
+            catch (Exception ex)
+            {
+                return new ResponseObject<UserLoginDTO>
+                {
+                    Status = StatusCodes.Status500InternalServerError,
+                    Message = $"Lỗi server: {ex.Message}",
+                    Data = null
+                };
+            }
+        }
+
+        public async Task<ResponseObject<UserLoginDTO>> Login(Request_Login request)
+        {
+            try
+            {
+                var user = await _userRepo.GetUserByUsername(request.UserName);
+                if (user == null || !Bcrypt.Verify(request.Password, user.Password))
+                {
+                    return new ResponseObject<UserLoginDTO>
+                    {
+                        Status = StatusCodes.Status401Unauthorized,
+                        Message = "Tên đăng nhập hoặc mật khẩu không đúng",
+                        Data = null
+                    };
+                }
+
+                if (user.Status != Domain.Enums.UserStatus.Active)
+                {
+                    return new ResponseObject<UserLoginDTO>
+                    {
+                        Status = StatusCodes.Status403Forbidden,
+                        Message = "Tài khoản chưa được kích hoạt hoặc bị khóa",
+                        Data = null
+                    };
+                }
+
+                return await GetJwtTokenAsync(user);
+            }
+            catch (Exception ex)
+            {
+                return new ResponseObject<UserLoginDTO>
+                {
+                    Status = StatusCodes.Status500InternalServerError,
+                    Message = $"Lỗi server: {ex.Message}",
+                    Data = null
+                };
             }
         }
 
@@ -66,58 +157,24 @@ namespace Core.Application.ImplementServices
             try
             {
                 if (!ValidateInput.IsValidEmail(request.Email))
-                {
-                    return new ResponseObject<UserDTO>
-                    {
-                        Status = StatusCodes.Status400BadRequest,
-                        Message = "Định dạng email không hợp lệ",
-                        Data = null
-                    };
-                }
+                    return CreateBadRequestResponse<UserDTO>("Định dạng email không hợp lệ");
 
                 if (!ValidateInput.IsValidPhoneNumber(request.PhoneNumber))
-                {
-                    return new ResponseObject<UserDTO>
-                    {
-                        Status = StatusCodes.Status400BadRequest,
-                        Message = "Định dạng số điện thoại không hợp lệ",
-                        Data = null
-                    };
-                }
+                    return CreateBadRequestResponse<UserDTO>("Định dạng số điện thoại không hợp lệ");
 
                 if (await _userRepo.GetUserByEmail(request.Email) != null)
-                {
-                    return new ResponseObject<UserDTO>
-                    {
-                        Status = StatusCodes.Status400BadRequest,
-                        Message = "Email đã tồn tại. Vui lòng dùng email khác",
-                        Data = null
-                    };
-                }
+                    return CreateBadRequestResponse<UserDTO>("Email đã tồn tại. Vui lòng dùng email khác");
 
                 if (await _userRepo.GetUserByPhoneNumber(request.PhoneNumber) != null)
-                {
-                    return new ResponseObject<UserDTO>
-                    {
-                        Status = StatusCodes.Status400BadRequest,
-                        Message = "Số điện thoại đã tồn tại. Vui lòng dùng SĐT khác",
-                        Data = null
-                    };
-                }
+                    return CreateBadRequestResponse<UserDTO>("Số điện thoại đã tồn tại. Vui lòng dùng SĐT khác");
 
                 if (await _userRepo.GetUserByUsername(request.UserName) != null)
-                {
-                    return new ResponseObject<UserDTO>
-                    {
-                        Status = StatusCodes.Status400BadRequest,
-                        Message = "UserName đã tồn tại. Vui lòng dùng UserName khác",
-                        Data = null
-                    };
-                }
+                    return CreateBadRequestResponse<UserDTO>("UserName đã tồn tại. Vui lòng dùng UserName khác");
+
                 var user = new User
                 {
                     AvatarImage = "https://photosbulk.com/wp-content/uploads/2024/08/hijab-girl-pic_108.webp",
-                    CreatedTime = DateTime.Now,
+                    CreatedTime = DateTime.UtcNow,
                     DateOfBirth = request.DateOfBirth,
                     Email = request.Email,
                     UserName = request.UserName,
@@ -126,19 +183,19 @@ namespace Core.Application.ImplementServices
                     Password = Bcrypt.HashPassword(request.Password),
                     Status = Domain.Enums.UserStatus.Inactive,
                 };
-                user = await _baseRepo.CreateAsync(user);
 
+                user = await _baseRepo.CreateAsync(user);
                 await _userRepo.AddRoleToUser(user, new List<string> { "User" });
 
                 string activationCode = GenerateCodeActive();
-                ConfirmEmail cfEmail = new ConfirmEmail
+                var cfEmail = new ConfirmEmail
                 {
                     ConfirmCode = activationCode,
-                    ExpiryTime = DateTime.Now.AddMinutes(1),
+                    ExpiryTime = DateTime.UtcNow.AddMinutes(1),
                     IsEmailConfirmed = false,
                     UserId = user.Id,
                 };
-                cfEmail = await _baseEmailRepo.CreateAsync(cfEmail);
+                await _baseEmailRepo.CreateAsync(cfEmail);
 
                 string emailResult = _emailService.SendVerificationEmail(request.Email, activationCode);
                 if (!emailResult.Contains("successfully"))
@@ -154,8 +211,8 @@ namespace Core.Application.ImplementServices
                 var userDTO = _mapper.Map<UserDTO>(user);
                 return new ResponseObject<UserDTO>
                 {
-                    Status =StatusCodes.Status201Created,
-                    Message= "Đăng ký thành công. Vui lòng kiểm tra email để kích hoạt tài khoản.",
+                    Status = StatusCodes.Status201Created,
+                    Message = "Đăng ký thành công. Vui lòng kiểm tra email để kích hoạt tài khoản.",
                     Data = userDTO
                 };
             }
@@ -170,6 +227,7 @@ namespace Core.Application.ImplementServices
             }
         }
 
+        #region Private Methods
         private string GenerateCodeActive()
         {
             const string chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
@@ -177,5 +235,53 @@ namespace Core.Application.ImplementServices
             return new string(Enumerable.Repeat(chars, 8)
                 .Select(s => s[random.Next(s.Length)]).ToArray());
         }
+
+        private string GenerateRefreshToken()
+        {
+            const string chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+            Random random = new Random();
+            return new string(Enumerable.Repeat(chars, 32) // Độ dài 32 ký tự
+                .Select(s => s[random.Next(s.Length)]).ToArray());
+        }
+
+        private async Task StoreRefreshToken(Guid userId, string refreshToken)
+        {
+            var refreshTokenEntity = new RefreshToken
+            {
+                UserId = userId,
+                Token = refreshToken,
+                ExpiryTime = DateTime.UtcNow.AddDays(7)
+            };
+            await _baseRefeshToken.CreateAsync(refreshTokenEntity); 
+        }
+
+        private JwtSecurityToken GetToken(List<Claim> claims)
+        {
+            var authSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_configuration["JwtConfiguration:Secret"]));
+            return new JwtSecurityToken(
+                issuer: _configuration["JwtConfiguration:ValidIssuer"],
+                audience: _configuration["JwtConfiguration:ValidAudience"],
+                expires: DateTime.UtcNow.AddHours(1),
+                claims: claims,
+                signingCredentials: new SigningCredentials(authSigningKey, SecurityAlgorithms.HmacSha256)
+            );
+        }
+
+        private string GenerateToken(List<Claim> claims)
+        {
+            var token = GetToken(claims);
+            return new JwtSecurityTokenHandler().WriteToken(token);
+        }
+
+        private ResponseObject<T> CreateBadRequestResponse<T>(string message)
+        {
+            return new ResponseObject<T>
+            {
+                Status = StatusCodes.Status400BadRequest,
+                Message = message,
+                Data = default(T)
+            };
+        }
+        #endregion
     }
 }

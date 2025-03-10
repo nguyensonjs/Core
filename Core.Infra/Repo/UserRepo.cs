@@ -32,7 +32,7 @@ namespace Core.Infra.Repo
 
             foreach (var role in listRoles.Distinct())
             {
-                var roleOfUser = (await GetRolesForUser(user)).ToList();
+                var roleOfUser = (await GetUserRoles(user)).ToList();
                 if (await IsStringInList(role, roleOfUser))
                 {
                     throw new ArgumentException("Người dùng đã có quyền này rồi");
@@ -54,25 +54,20 @@ namespace Core.Infra.Repo
             await _context.SaveChangesAsync(); // ✅ Sử dụng `await` để tránh lỗi
         }
 
-        public async Task<IEnumerable<string>> GetRolesForUser(User user)
+        public async Task<IEnumerable<string>> GetUserRoles(User user)
         {
-            var roles = new List<string>();
+            var roleCodes = await _context.Permissions
+                .Where(p => p.UserId == user.Id)
+                .Join(
+                    _context.Roles,
+                    permission => permission.RoleId,
+                    role => role.Id,
+                    (permission, role) => role.RoleCode
+                )
+                .Distinct()
+                .ToListAsync();
 
-            var listRoles = _context.Permissions
-                .Where(x => x.UserId == user.Id)
-                .Select(x => x.RoleId)
-                .Distinct();
-
-            foreach (var roleId in listRoles)
-            {
-                var role = await _context.Roles.FindAsync(roleId);
-                if (role != null)
-                {
-                    roles.Add(role.RoleCode);
-                }
-            }
-
-            return roles;
+            return roleCodes;
         }
 
         public async Task<User> GetUserByEmail(string email)

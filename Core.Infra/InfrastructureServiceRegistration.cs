@@ -21,6 +21,7 @@ namespace Core.Infra
 
             services.AddScoped<IBaseRepo<User>, BaseRepo<User>>();
             services.AddScoped<IBaseRepo<ConfirmEmail>, BaseRepo<ConfirmEmail>>();
+            services.AddScoped<IBaseRepo<RefreshToken>, BaseRepo<RefreshToken>>();
 
             services.AddScoped<IUserRepo, UserRepo>();
 

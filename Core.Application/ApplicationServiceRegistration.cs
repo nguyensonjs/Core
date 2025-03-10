@@ -1,8 +1,7 @@
-﻿using AutoMapper;
-using Core.Application.ImplementServices;
+﻿using Core.Application.ImplementServices;
 using Core.Application.InterfaceServices;
+using Core.Application.Payloads.Mappers;
 using Microsoft.Extensions.DependencyInjection;
-using System.Reflection;
 
 namespace Core.Application
 {
@@ -10,13 +9,7 @@ namespace Core.Application
     {
         public static IServiceCollection AddApplicationServices(this IServiceCollection services)
         {
-            var mapperConfig = new MapperConfiguration(cfg =>
-            {
-                cfg.AddMaps(Assembly.GetExecutingAssembly());
-            });
-
-            var mapper = mapperConfig.CreateMapper();
-            services.AddSingleton(mapper);
+            services.AddAutoMapper(typeof(MappingProfile));
 
             services.AddScoped<IAuthService, AuthService>();
             services.AddScoped<IEmailService, EmailService>();

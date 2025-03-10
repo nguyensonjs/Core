@@ -9,6 +9,6 @@
         public DateTime CreatedTime { get; set; }
         public DateTime? UpdatedTime { get; set; }
         public string? AvatarImage { get; set; }
-        public string Status { get; set; }
+        public string Status { get; set; } = string.Empty;
     }
 }
