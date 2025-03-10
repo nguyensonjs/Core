@@ -1,4 +1,5 @@
 ﻿using AutoMapper;
+using Core.Application.Handle.HandleEmail;
 using Core.Application.InterfaceServices;
 using Core.Application.Payloads.RequestModels.UserRequest;
 using Core.Application.Payloads.ResponseModels.DataUser;
@@ -7,6 +8,7 @@ using Core.Domain.Interfaces;
 using Core.Domain.Models;
 using Core.Domain.Validations;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Configuration;
 using Microsoft.IdentityModel.Tokens;
 using System.IdentityModel.Tokens.Jwt;
@@ -199,7 +201,144 @@ namespace Core.Application.ImplementServices
                 };
             }
         }
+        public async Task<ResponseObject<string>> ForgotPassword(Request_ForgotPassword request)
+        {
+            try
+            {
+                var user = await _userRepo.GetUserByEmail(request.Email);
+                if (user == null)
+                {
+                    return new ResponseObject<string>
+                    {
+                        Status = StatusCodes.Status404NotFound,
+                        Message = "Không tìm thấy người dùng với email này",
+                        Data = null
+                    };
+                }
 
+                // Tạo reset code
+                string resetCode = GenerateCodeActive();
+                var resetEntity = new ConfirmEmail
+                {
+                    UserId = user.Id,
+                    ConfirmCode = resetCode,
+                    ExpiryTime = DateTime.UtcNow.AddMinutes(10),
+                    IsEmailConfirmed = false // Tái sử dụng ConfirmEmail để lưu reset code
+                };
+
+                // Xóa reset code cũ nếu có
+                var existingCode = await _baseEmailRepo.GetFirstOrDefaultAsync(x => x.UserId == user.Id && !x.IsEmailConfirmed);
+                if (existingCode != null)
+                {
+                    await _baseEmailRepo.DeleteAsync(existingCode.Id);
+                }
+
+                await _baseEmailRepo.CreateAsync(resetEntity);
+
+                // Tạo email message với MimeKit
+                string resetLink = $"{_configuration["Domain"]}/reset-password?email={Uri.EscapeDataString(request.Email)}&code={resetCode}";
+                var emailMessage = new EmailMessage(
+                    to: new[] { request.Email },
+                    subject: "Reset Password",
+                    content: $"Click vào link sau để reset mật khẩu của bạn: <a href='{resetLink}'>{resetLink}</a><br/>Link sẽ hết hạn sau 10 phút.",
+                    displayName: "Administrator"
+                );
+
+                // Gửi email
+                string emailResult = _emailService.SendEmail(emailMessage);
+                if (!emailResult.ToLower().Contains("successfully"))
+                {
+                    return new ResponseObject<string>
+                    {
+                        Status = StatusCodes.Status500InternalServerError,
+                        Message = $"Gửi email thất bại: {emailResult}",
+                        Data = null
+                    };
+                }
+
+                return new ResponseObject<string>
+                {
+                    Status = StatusCodes.Status200OK,
+                    Message = "Link reset mật khẩu đã được gửi qua email",
+                    Data = null
+                };
+            }
+            catch (Exception ex)
+            {
+                return new ResponseObject<string>
+                {
+                    Status = StatusCodes.Status500InternalServerError,
+                    Message = $"Lỗi server: {ex.Message}",
+                    Data = null
+                };
+            }
+        }
+        public async Task<ResponseObject<string>> ResetPassword(Request_ResetPassword request)
+        {
+            try
+            {
+                var user = await _userRepo.GetUserByEmail(request.Email);
+                if (user == null)
+                {
+                    return new ResponseObject<string>
+                    {
+                        Status = StatusCodes.Status404NotFound,
+                        Message = "Không tìm thấy người dùng với email này",
+                        Data = null
+                    };
+                }
+
+                var resetCode = await _baseEmailRepo.GetFirstOrDefaultAsync(
+                    x => x.UserId == user.Id &&
+                         x.ConfirmCode == request.ResetCode &&
+                         !x.IsEmailConfirmed
+                );
+
+                if (resetCode == null)
+                {
+                    return new ResponseObject<string>
+                    {
+                        Status = StatusCodes.Status400BadRequest,
+                        Message = "Mã reset không hợp lệ",
+                        Data = null
+                    };
+                }
+
+                if (resetCode.ExpiryTime < DateTime.UtcNow)
+                {
+                    return new ResponseObject<string>
+                    {
+                        Status = StatusCodes.Status400BadRequest,
+                        Message = "Mã reset đã hết hạn",
+                        Data = null
+                    };
+                }
+
+                // Cập nhật mật khẩu
+                user.Password = Bcrypt.HashPassword(request.NewPassword);
+                await _baseRepo.UpdateAsync(user);
+
+                // Đánh dấu reset code đã sử dụng
+                resetCode.IsEmailConfirmed = true; // Tái sử dụng field này để đánh dấu
+                await _baseEmailRepo.UpdateAsync(resetCode);
+
+                return new ResponseObject<string>
+                {
+                    Status = StatusCodes.Status200OK,
+                    Message = "Reset mật khẩu thành công",
+                    Data = "Mật khẩu đã được cập nhật"
+                };
+            }
+            catch (Exception ex)
+            {
+                return new ResponseObject<string>
+                {
+                    Status = StatusCodes.Status500InternalServerError,
+                    Message = $"Lỗi server: {ex.Message}",
+                    Data = null
+                };
+            }
+        }
 
         public async Task<ResponseObject<UserLoginDTO>> GetJwtTokenAsync(User user)
         {

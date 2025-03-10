@@ -56,5 +56,25 @@ namespace Core.Api.Controllers
             var result = await _authService.ChangePassword(Guid.Parse(userId), request);
             return StatusCode(result.Status, result);
         }
+
+        [HttpPost("forgot-password")]
+        public async Task<IActionResult> ForgotPassword([FromBody] Request_ForgotPassword request)
+        {
+            if (!ModelState.IsValid)
+                return BadRequest(new { Message = "Dữ liệu không hợp lệ" });
+
+            var result = await _authService.ForgotPassword(request);
+            return Ok( result);
+        }
+
+        [HttpPost("reset-password")]
+        public async Task<IActionResult> ResetPassword([FromBody] Request_ResetPassword request)
+        {
+            if (!ModelState.IsValid)
+                return BadRequest(new { Message = "Dữ liệu không hợp lệ" });
+
+            var result = await _authService.ResetPassword(request);
+            return Ok(result);
+        }
     }
 }

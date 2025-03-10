@@ -13,5 +13,7 @@ namespace Core.Application.InterfaceServices
         Task<ResponseObject<UserLoginDTO>> GetJwtTokenAsync (User user);
         Task<ResponseObject<UserLoginDTO>> Login (Request_Login request);
         Task<ResponseObject<string>> ChangePassword(Guid userId, Request_ChangePassword request);
+        Task<ResponseObject<string>> ForgotPassword(Request_ForgotPassword request);
+        Task<ResponseObject<string>> ResetPassword(Request_ResetPassword request);
     }
 }
