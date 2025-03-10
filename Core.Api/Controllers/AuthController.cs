@@ -32,5 +32,12 @@ namespace Core.Api.Controllers
         {
             return Ok(await _authService.ConfirmRegisterAccount(verifyCode));
         }
+
+        [HttpPost("resend-verify-code")]
+        public async Task<IActionResult> ResendConfirmationCode([FromBody] Request_ResendCode request)
+        {
+            var result = await _authService.ResendConfirmationCode(request.Email);
+            return StatusCode(result.Status, result);
+        }
     }
 }

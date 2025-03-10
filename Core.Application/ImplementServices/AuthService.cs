@@ -72,6 +72,80 @@ namespace Core.Application.ImplementServices
             }
         }
 
+        public async Task<ResponseObject<string>> ResendConfirmationCode(string email)
+        {
+            try
+            {
+                var user = await _userRepo.GetUserByEmail(email);
+                if (user == null)
+                {
+                    return new ResponseObject<string>
+                    {
+                        Status = StatusCodes.Status404NotFound,
+                        Message = "Người dùng không tồn tại.",
+                        Data = null
+                    };
+                }
+
+                if (user.Status == Domain.Enums.UserStatus.Active)
+                {
+                    return new ResponseObject<string>
+                    {
+                        Status = StatusCodes.Status400BadRequest,
+                        Message = "Tài khoản đã được kích hoạt.",
+                        Data = null
+                    };
+                }
+
+                var existingCode = await _baseEmailRepo.GetFirstOrDefaultAsync(x => x.UserId == user.Id);
+                if (existingCode != null)
+                {
+                    await _baseEmailRepo.DeleteAsync(existingCode.Id);
+                }
+
+                string newCode = GenerateCodeActive();
+                var confirmEmail = new ConfirmEmail
+                {
+                    UserId = user.Id,
+                    ConfirmCode = newCode,
+                    ExpiryTime = DateTime.UtcNow.AddMinutes(10),
+                    IsEmailConfirmed = false
+                };
+
+                await _baseEmailRepo.CreateAsync(confirmEmail);
+
+                string emailResult = _emailService.SendVerificationEmail(user.Email, newCode);
+                if (!emailResult.ToLower().Contains("successfully")) 
+                {
+                    return new ResponseObject<string>
+                    {
+                        Status = StatusCodes.Status500InternalServerError,
+                        Message = $"Gửi email thất bại: {emailResult}",
+                        Data = null
+                    };
+                }
+
+
+
+                return new ResponseObject<string>
+                {
+                    Status = StatusCodes.Status200OK,
+                    Message = "Mã xác nhận đã được gửi lại. Vui lòng kiểm tra email của bạn.",
+                    Data = "Mã xác nhận mới đã được gửi."
+                };
+            }
+            catch (Exception ex)
+            {
+                return new ResponseObject<string>
+                {
+                    Status = StatusCodes.Status500InternalServerError,
+                    Message = $"Lỗi server: {ex.Message}",
+                    Data = null
+                };
+            }
+        }
+
+
         public async Task<ResponseObject<UserLoginDTO>> GetJwtTokenAsync(User user)
         {
             try

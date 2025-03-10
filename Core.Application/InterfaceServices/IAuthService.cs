@@ -9,6 +9,7 @@ namespace Core.Application.InterfaceServices
     {
         Task<ResponseObject<UserDTO>> Register(Request_Register request);
         Task<string> ConfirmRegisterAccount(string code);
+        Task<ResponseObject<string>> ResendConfirmationCode(string email);
         Task<ResponseObject<UserLoginDTO>> GetJwtTokenAsync (User user);
         Task<ResponseObject<UserLoginDTO>> Login (Request_Login request);
 
