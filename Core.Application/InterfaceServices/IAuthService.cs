@@ -12,6 +12,6 @@ namespace Core.Application.InterfaceServices
         Task<ResponseObject<string>> ResendConfirmationCode(string email);
         Task<ResponseObject<UserLoginDTO>> GetJwtTokenAsync (User user);
         Task<ResponseObject<UserLoginDTO>> Login (Request_Login request);
-
+        Task<ResponseObject<string>> ChangePassword(Guid userId, Request_ChangePassword request);
     }
 }

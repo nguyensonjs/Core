@@ -1,6 +1,8 @@
 ﻿using Core.Application.InterfaceServices;
 using Core.Application.Payloads.RequestModels.UserRequest;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using System.Security.Claims;
 
 namespace Core.Api.Controllers
 {
@@ -37,6 +39,21 @@ namespace Core.Api.Controllers
         public async Task<IActionResult> ResendConfirmationCode([FromBody] Request_ResendCode request)
         {
             var result = await _authService.ResendConfirmationCode(request.Email);
+            return StatusCode(result.Status, result);
+        }
+
+        [Authorize]
+        [HttpPost("change-password")]
+        public async Task<IActionResult> ChangePassword([FromBody] Request_ChangePassword request)
+        {
+            if (!ModelState.IsValid)
+                return BadRequest(new { Message = "Dữ liệu không hợp lệ" });
+
+            var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (userId == null)
+                return Unauthorized(new { Message = "Không thể xác thực người dùng." });
+
+            var result = await _authService.ChangePassword(Guid.Parse(userId), request);
             return StatusCode(result.Status, result);
         }
     }

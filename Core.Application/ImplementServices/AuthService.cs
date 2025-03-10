@@ -144,6 +144,61 @@ namespace Core.Application.ImplementServices
                 };
             }
         }
+        public async Task<ResponseObject<string>> ChangePassword(Guid userId, Request_ChangePassword request)
+        {
+            try
+            {
+                var user = await _baseRepo.GetFirstOrDefaultAsync(x => x.Id == userId);
+                if (user == null)
+                {
+                    return new ResponseObject<string>
+                    {
+                        Status = StatusCodes.Status404NotFound,
+                        Message = "Người dùng không tồn tại.",
+                        Data = null
+                    };
+                }
+
+                if (!Bcrypt.Verify(request.OldPassword, user.Password))
+                {
+                    return new ResponseObject<string>
+                    {
+                        Status = StatusCodes.Status400BadRequest,
+                        Message = "Mật khẩu cũ không chính xác.",
+                        Data = null
+                    };
+                }
+
+                if (request.NewPassword != request.ConfirmNewPassword)
+                {
+                    return new ResponseObject<string>
+                    {
+                        Status = StatusCodes.Status400BadRequest,
+                        Message = "Mật khẩu mới và xác nhận mật khẩu không khớp.",
+                        Data = null
+                    };
+                }
+
+                user.Password = Bcrypt.HashPassword(request.NewPassword);
+                await _baseRepo.UpdateAsync(user);
+
+                return new ResponseObject<string>
+                {
+                    Status = StatusCodes.Status200OK,
+                    Message = "Đổi mật khẩu thành công.",
+                    Data = "Mật khẩu đã được cập nhật."
+                };
+            }
+            catch (Exception ex)
+            {
+                return new ResponseObject<string>
+                {
+                    Status = StatusCodes.Status500InternalServerError,
+                    Message = $"Lỗi server: {ex.Message}",
+                    Data = null
+                };
+            }
+        }
 
 
         public async Task<ResponseObject<UserLoginDTO>> GetJwtTokenAsync(User user)
